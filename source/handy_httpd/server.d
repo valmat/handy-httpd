@@ -6,11 +6,13 @@ module handy_httpd.server;
 import std.stdio;
 import std.socket;
 import std.regex;
+import std.string : toStringz;
 import std.conv : to, ConvException;
 import std.container.dlist : DList;
 import core.sync.semaphore : Semaphore;
 import core.atomic : atomicLoad;
 import core.thread.threadgroup : ThreadGroup;
+import core.stdc.stdio : printf;
 
 import handy_httpd.request;
 import handy_httpd.response;
@@ -87,9 +89,13 @@ class HttpServer {
 
         if (this.config.verbose) writeln("Now accepting connections.");
         while (this.serverSocket.isAlive()) {
-            Socket clientSocket = this.serverSocket.accept();
-            this.requestQueue.insertBack(clientSocket);
-            this.requestSemaphore.notify();
+            try {
+                Socket clientSocket = this.serverSocket.accept();
+                this.requestQueue.insertBack(clientSocket);
+                this.requestSemaphore.notify();
+            } catch(SocketAcceptException e) {
+                if (this.config.verbose) printf("Can't accept connections : %.*s\n", cast(int) e.msg.length, e.msg.ptr);
+            }
         }
         this.ready = false;
         
@@ -100,9 +106,10 @@ class HttpServer {
      * Shuts down the server by closing the server socket, if possible. This
      * will block until all pending requests have been fulfilled.
      */
-    public void stop() {
-        if (this.config.verbose) writeln("Stopping the server.");
+    public void stop() nothrow @nogc @system {
+        if (this.config.verbose) printf("Stopping the server.\n");
         if (this.serverSocket !is null) {
+            this.serverSocket.shutdown(SocketShutdown.BOTH);
             this.serverSocket.close();
         }
     }
